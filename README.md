@@ -91,6 +91,7 @@ Anomaly detection results in CSV format
 
 Interactive dashboard for monitoring
 
+Since the project involves unsupervised anomaly detection and no labeled ground truth is available, traditional accuracy metrics are not applicable. The model is evaluated using severity scoring, anomaly rate analysis, and temporal pattern validation.
 
 Disclaimer:
 This project uses publicly available aggregated data and is intended for academic and analytical purposes only.
