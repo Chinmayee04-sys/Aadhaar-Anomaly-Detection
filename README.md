@@ -1,4 +1,4 @@
-## Aadhaar Anomaly Detection System
+# Aadhaar Anomaly Detection System
 
 This project analyzes Aadhaar enrolment and update data to detect unusual patterns such as sudden spikes, abnormal volume deviations, and irregular trends that may indicate operational issues or system inefficiencies. It primarily uses the Aadhaar Demographic Update Dataset provided by UIDAI, which contains aggregated monthly update counts across regions. The dataset is well suited for identifying temporal anomalies without requiring labeled data. An unsupervised machine learning approach is applied to automatically detect abnormal patterns and assess their severity. The detected anomalies are presented through a FastAPI-based backend and an interactive dashboard to support effective monitoring and informed decision-making.
 
@@ -73,11 +73,59 @@ cd dashboard
 streamlit run app.py
 
 
-## Output:
-- Anomaly detection results in CSV format
-- Interactive dashboard for monitoring
+## Output
 
+The system generates a structured anomaly analysis report after processing the uploaded Aadhaar update data.
+
+## Backend API Output
+The `/detect-anomalies` API returns a JSON response containing:
+- Total number of records analyzed
+- Total anomalies detected
+- Detailed anomaly information for each affected month
+
+Each anomaly record includes:
+- Month
+- Total update count
+- Anomaly type (e.g., sudden spike, unusual deviation)
+- Severity level (Low, Medium, High)
+- Severity score
+- Confidence score
+- Explanation of why the anomaly was detected
+- Month-to-month change description
+- Root cause hint
+- Early-warning forecast and alert message
+
+## Sample API Response 
+
+```json
+{
+  "total_records": 12,
+  "anomalies_detected": 2,
+  "results": [
+    {
+      "month": "2024-12-01",
+      "total_updates": 26193030,
+      "anomaly_type": "Sudden Spike in Updates",
+      "severity_level": "Medium",
+      "severity_score": 52.61,
+      "confidence_score": 84.32,
+      "what_changed": "Updates increased significantly compared to previous month",
+      "root_cause_hint": "Seasonal demand surge or policy-driven update campaign",
+      "early_warning_alert": "No early warning detected"
+    }
+  ]
+}
+Dashboard Output
+- The Streamlit dashboard provides:
+- Summary metrics (total records, anomalies, high-severity alerts)
+- Tabular view of detected anomalies
+- Severity-based visual indicators
+- Clear explanations and recommended actions for monitoring
+
+The dashboard enables quick interpretation of anomalies and supports informed operational and governance decisions.
+## Model Evaluation
 Since the project involves unsupervised anomaly detection and no labeled ground truth is available, traditional accuracy metrics are not applicable. The model is evaluated using severity scoring, anomaly rate analysis, and temporal pattern validation.
+
 
 ## Advanced Analytics and Governance Support
 The system goes beyond basic anomaly detection by providing explainable and predictive insights. 
