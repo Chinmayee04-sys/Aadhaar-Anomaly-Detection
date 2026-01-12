@@ -1,34 +1,29 @@
-Aadhaar Anomaly Detection System
+## Aadhaar Anomaly Detection System
 
 This project analyzes Aadhaar enrolment and update data to detect unusual patterns such as sudden spikes, abnormal volume deviations, and irregular trends that may indicate operational issues or system inefficiencies. It primarily uses the Aadhaar Demographic Update Dataset provided by UIDAI, which contains aggregated monthly update counts across regions. The dataset is well suited for identifying temporal anomalies without requiring labeled data. An unsupervised machine learning approach is applied to automatically detect abnormal patterns and assess their severity. The detected anomalies are presented through a FastAPI-based backend and an interactive dashboard to support effective monitoring and informed decision-making.
 
-Objectives:
+## Objectives:
 
-Detect anomalies in Aadhaar enrolment and update data
-
-Classify anomalies by severity level
-
-Provide actionable insights for monitoring
-
-Visualize results through a dashboard
-
-Enable automated monthly anomaly checks
+- Detect anomalies in Aadhaar enrolment and update data
+- Classify anomalies by severity level
+- Provide actionable insights for monitorin
+- Visualize results through a dashboard
+- Enable automated monthly anomaly checks
 
 
-Key Features:
+## Key Features
 
-Machine learning–based anomaly detection (Isolation Forest)
+- Machine learning–based anomaly detection using Isolation Forest
+- Severity scoring and confidence-based prioritization
+- Explainable anomaly detection with root cause hints
+- Month-to-month change explanation for interpretability
+- Early-warning forecasting for proactive monitoring
+- FastAPI backend for data processing
+- Streamlit dashboard for visualization
+- Automated monthly anomaly monitoring
 
-Severity scoring and classification
 
-FastAPI backend for data processing
-
-Streamlit dashboard for visualization
-
-Automated monthly monitoring
-
-
-Project Structure
+## Project Structure
 Aadhaar_Anomaly_Detection/
 
 ├── backend/
@@ -50,27 +45,20 @@ Aadhaar_Anomaly_Detection/
 └── README.md
 
 
-Dataset:
-
-Aadhaar enrolment and update data
-
+## Dataset:
+- Aadhaar Demographic Update Dataset provided by UIDAI
 Source: UIDAI Open Government Data Platform
 
 Format: CSV (aggregated monthly data)
 
-Technology Stack:
+## Technology Stack:
+- Python
+- Scikit-learn
+- FastAPI
+- Streamlit
+- Pandas, NumPy
 
-Python
-
-Scikit-learn
-
-FastAPI
-
-Streamlit
-
-Pandas, NumPy
-
-How to Run:
+## How to Run:
 
 Start Backend
 
@@ -85,17 +73,21 @@ cd dashboard
 streamlit run app.py
 
 
-Output:
-
-Anomaly detection results in CSV format
-
-Interactive dashboard for monitoring
+## Output:
+- Anomaly detection results in CSV format
+- Interactive dashboard for monitoring
 
 Since the project involves unsupervised anomaly detection and no labeled ground truth is available, traditional accuracy metrics are not applicable. The model is evaluated using severity scoring, anomaly rate analysis, and temporal pattern validation.
 
-Disclaimer:
+## Advanced Analytics and Governance Support
+The system goes beyond basic anomaly detection by providing explainable and predictive insights. 
+Each detected anomaly includes a root cause hint, a confidence score, and a clear explanation of what changed compared to the previous month. 
+Additionally, an early-warning mechanism forecasts next-month update volumes and raises alerts when abnormal patterns are anticipated.
+These features support proactive governance, operational planning, and service reliability monitoring.
+
+
+## Disclaimer:
 This project uses publicly available aggregated data and is intended for academic and analytical purposes only.
 
-Author:
-
-Chinmayee Reddy
+## Author:
+- Chinmayee Reddy
