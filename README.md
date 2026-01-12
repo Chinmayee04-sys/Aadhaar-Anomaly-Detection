@@ -1,6 +1,6 @@
 Aadhaar Anomaly Detection System
 
-This project analyzes Aadhaar enrolment and update data to detect unusual patterns such as sudden spikes, abnormal volume deviations, and irregular trends. These anomalies may indicate operational issues or system inefficiencies. The system uses machine learning to identify anomalies and presents insights through an API and an interactive dashboard.
+This project analyzes Aadhaar enrolment and update data to detect unusual patterns such as sudden spikes, abnormal volume deviations, and irregular trends that may indicate operational issues or system inefficiencies. It primarily uses the Aadhaar Demographic Update Dataset provided by UIDAI, which contains aggregated monthly update counts across regions. The dataset is well suited for identifying temporal anomalies without requiring labeled data. An unsupervised machine learning approach is applied to automatically detect abnormal patterns and assess their severity. The detected anomalies are presented through a FastAPI-based backend and an interactive dashboard to support effective monitoring and informed decision-making.
 
 Objectives:
 
