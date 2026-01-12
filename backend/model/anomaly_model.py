@@ -1,195 +1,158 @@
 import pandas as pd
+import numpy as np
 from sklearn.preprocessing import StandardScaler
 from sklearn.ensemble import IsolationForest
 
 
-def run_anomaly_detection(df: pd.DataFrame):
-
-    # =====================================================
-    # 1. Normalize column names
-    # =====================================================
-    df.columns = (
-        df.columns
-        .astype(str)
-        .str.strip()
-        .str.lower()
-        .str.replace(" ", "_")
-        .str.replace("-", "_")
-    )
-
-    # =====================================================
-    # 2. Identify month column
-    # =====================================================
-    month_col = None
-    for col in df.columns:
-        if "month" in col or "period" in col or "date" in col:
-            month_col = col
-            break
-
-    if month_col is None:
-        raise ValueError(
-            f"No month-like column found. Columns: {list(df.columns)}"
-        )
-
-    df.rename(columns={month_col: "month"}, inplace=True)
-
-    # =====================================================
-    # 3. Identify total updates column
-    # =====================================================
-    updates_col = None
-    for col in df.columns:
-        if "update" in col or "value" in col:
-            updates_col = col
-            break
-
-    if updates_col is None:
-        raise ValueError(
-            f"No updates/value column found. Columns: {list(df.columns)}"
-        )
-
-    df.rename(columns={updates_col: "total_updates"}, inplace=True)
-
-    # =====================================================
-    # 4. Identify state / district columns (if present)
-    # =====================================================
-    state_col = None
-    district_col = None
-
-    for col in df.columns:
-        if "state" in col:
-            state_col = col
-        if "district" in col:
-            district_col = col
-
-    # Standardize text
-    if state_col:
-        df[state_col] = df[state_col].astype(str).str.title().str.strip()
-    if district_col:
-        df[district_col] = df[district_col].astype(str).str.title().str.strip()
-
-    # =====================================================
-    # 5. Convert and sort by month
-    # =====================================================
+def run_anomaly_detection(df: pd.DataFrame) -> pd.DataFrame:
+    # -----------------------------
+    # Basic preprocessing
+    # -----------------------------
     df["month"] = pd.to_datetime(df["month"], errors="coerce")
     df = df.dropna(subset=["month"])
     df = df.sort_values("month").reset_index(drop=True)
 
-    # =====================================================
-    # 6. Decide grouping level
-    # =====================================================
-    if state_col and district_col:
-        group_cols = [state_col, district_col]
-    elif state_col:
-        group_cols = [state_col]
-    else:
-        group_cols = None  # National-level
+    # -----------------------------
+    # Feature engineering
+    # -----------------------------
+    df["update_growth_rate"] = df["total_updates"].pct_change().fillna(0)
+    df["rolling_avg"] = df["total_updates"].rolling(3).mean().fillna(0)
+    df["trend_deviation"] = df["total_updates"] - df["rolling_avg"]
 
-    results = []
+    features = ["total_updates", "update_growth_rate", "trend_deviation"]
+    X = df[features]
 
-    # =====================================================
-    # 7. Group-wise anomaly detection
-    # =====================================================
-    grouped_data = (
-        df.groupby(group_cols)
-        if group_cols else
-        [(None, df)]
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
+
+    # -----------------------------
+    # Isolation Forest
+    # -----------------------------
+    model = IsolationForest(
+        n_estimators=200,
+        contamination=0.15,
+        random_state=42
     )
 
-    for group_key, group_df in grouped_data:
+    df["anomaly_flag"] = model.fit_predict(X_scaled)
+    df["anomaly"] = df["anomaly_flag"].map({1: "Normal", -1: "Anomaly"})
 
-        # Skip very small groups
-        if len(group_df) < 6:
-            continue
+    # -----------------------------
+    # Severity score & level
+    # -----------------------------
+    df["severity_score"] = (
+        abs(df["update_growth_rate"]) * 100 +
+        abs(df["trend_deviation"]) / df["total_updates"].mean() * 100
+    ).round(2)
 
-        group_df = group_df.sort_values("month").copy()
+    def severity_level(score):
+        if score >= 60:
+            return "High"
+        elif score >= 30:
+            return "Medium"
+        return "Low"
 
-        # Feature engineering
-        group_df["update_growth_rate"] = group_df["total_updates"].pct_change()
-        group_df["rolling_avg"] = group_df["total_updates"].rolling(3).mean()
-        group_df["trend_deviation"] = (
-            group_df["total_updates"] - group_df["rolling_avg"]
-        )
+    df["severity_level"] = df["severity_score"].apply(severity_level)
 
-        group_df.fillna(0, inplace=True)
+    # -----------------------------
+    # Anomaly type
+    # -----------------------------
+    def anomaly_type(row):
+        if row["update_growth_rate"] > 0.5:
+            return "Sudden Spike in Updates"
+        elif row["update_growth_rate"] < -0.3:
+            return "Sudden Drop in Updates"
+        elif abs(row["trend_deviation"]) > row["total_updates"] * 0.25:
+            return "Unusual Volume Deviation"
+        return "Irregular Pattern"
 
-        # ML features
-        features = [
-            "total_updates",
-            "update_growth_rate",
-            "trend_deviation"
-        ]
+    df["anomaly_type"] = df.apply(anomaly_type, axis=1)
 
-        X = group_df[features]
+    # -----------------------------
+    # Root cause hint
+    # -----------------------------
+    def root_cause_hint(a_type):
+        if a_type == "Sudden Spike in Updates":
+            return "Seasonal demand surge or policy-driven update campaign"
+        elif a_type == "Sudden Drop in Updates":
+            return "Connectivity issues or temporary centre downtime"
+        elif a_type == "Unusual Volume Deviation":
+            return "Device malfunction or reporting inconsistency"
+        else:
+            return "Normal operational fluctuation"
 
-        scaler = StandardScaler()
-        X_scaled = scaler.fit_transform(X)
+    df["root_cause_hint"] = df["anomaly_type"].apply(root_cause_hint)
 
-        model = IsolationForest(
-            n_estimators=200,
-            contamination=0.15,
-            random_state=42
-        )
+    # -----------------------------
+    # Explanation (why flagged)
+    # -----------------------------
+    def explain_anomaly(row):
+        reasons = []
+        if abs(row["update_growth_rate"]) > 0.4:
+            reasons.append("High update growth rate")
+        if abs(row["trend_deviation"]) > row["total_updates"] * 0.25:
+            reasons.append("Large deviation from historical trend")
+        if not reasons:
+            reasons.append("Minor irregular variation")
+        return ", ".join(reasons)
 
-        group_df["anomaly_flag"] = model.fit_predict(X_scaled)
-        group_df["anomaly"] = group_df["anomaly_flag"].map(
-            {1: "Normal", -1: "Anomaly"}
-        )
+    df["explanation"] = df.apply(explain_anomaly, axis=1)
 
-        # =================================================
-        # 8. Severity score & level
-        # =================================================
-        group_df["severity_score"] = (
-            abs(group_df["update_growth_rate"]) * 100 +
-            abs(group_df["trend_deviation"]) / 1_000_000
-        )
+    # -----------------------------
+    # Confidence score (0–100)
+    # -----------------------------
+    max_sev = df["severity_score"].max()
+    df["confidence_score"] = (
+        df["severity_score"] / max_sev * 100
+    ).round(2)
 
-        def severity_level(score):
-            if score >= 70:
-                return "High"
-            elif score >= 30:
-                return "Medium"
-            else:
-                return "Low"
+    # -----------------------------
+    # What changed? (month-to-month)
+    # -----------------------------
+    def what_changed(curr, prev):
+        diff = curr["total_updates"] - prev["total_updates"]
+        pct = (diff / prev["total_updates"]) * 100
+        if pct > 20:
+            return f"Updates increased by {pct:.1f}% compared to previous month"
+        elif pct < -20:
+            return f"Updates decreased by {abs(pct):.1f}% compared to previous month"
+        else:
+            return "Minor change compared to previous month"
 
-        group_df["severity_level"] = group_df["severity_score"].apply(severity_level)
+    changes = []
+    for i in range(len(df)):
+        if i == 0:
+            changes.append("No previous data for comparison")
+        else:
+            changes.append(what_changed(df.iloc[i], df.iloc[i - 1]))
 
-        # =================================================
-        # 9. Anomaly type classification
-        # =================================================
-        def classify_anomaly(row):
-            if row["update_growth_rate"] > 0.3:
-                return "Sudden Spike in Updates"
-            elif row["update_growth_rate"] < -0.3:
-                return "Sudden Drop in Updates"
-            elif abs(row["trend_deviation"]) > 2_000_000:
-                return "Unusual Volume Deviation"
-            else:
-                return "Irregular Pattern"
+    df["what_changed"] = changes
 
-        group_df["anomaly_type"] = group_df.apply(classify_anomaly, axis=1)
+    # -----------------------------
+    # Early-warning forecast
+    # -----------------------------
+    if len(df) >= 3:
+        last3 = df.tail(3)
+        avg_val = last3["total_updates"].mean()
+        trend = last3["total_updates"].iloc[-1] - last3["total_updates"].iloc[0]
+        forecast = round(avg_val + (trend / 2), 2)
+    else:
+        forecast = None
 
-        # =================================================
-        # 10. Recommended actions
-        # =================================================
-        def recommend_action(row):
-            if row["anomaly_type"] == "Sudden Spike in Updates":
-                return "Increase staff, check system load"
-            elif row["anomaly_type"] == "Sudden Drop in Updates":
-                return "Check connectivity and system uptime"
-            elif row["anomaly_type"] == "Unusual Volume Deviation":
-                return "Operational audit recommended"
-            else:
-                return "Monitor closely"
+    df["forecast_next_month"] = forecast
 
-        group_df["recommended_action"] = group_df.apply(
-            recommend_action, axis=1
-        )
+    if forecast is not None:
+        mean = df["total_updates"].mean()
+        std = df["total_updates"].std()
+        if forecast > mean + 2 * std:
+            alert = "Early Warning: Possible surge in updates next month"
+        elif forecast < mean - 2 * std:
+            alert = "Early Warning: Possible drop in updates next month"
+        else:
+            alert = "No early warning detected"
+    else:
+        alert = "Insufficient data for forecasting"
 
-        results.append(group_df)
+    df["early_warning_alert"] = alert
 
-    # =====================================================
-    # 11. Combine all groups
-    # =====================================================
-    final_df = pd.concat(results).reset_index(drop=True)
-
-    return final_df
+    return df
