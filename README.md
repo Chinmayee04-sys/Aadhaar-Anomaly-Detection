@@ -95,47 +95,40 @@ Each anomaly record includes:
 - Root cause hint
 - Early-warning forecast and alert message
 
-## Sample API Response 
+### Dashboard Output
 
-```json
-{
-  "total_records": 12,
-  "anomalies_detected": 2,
-  "results": [
-    {
-      "month": "2024-12-01",
-      "total_updates": 26193030,
-      "anomaly_type": "Sudden Spike in Updates",
-      "severity_level": "Medium",
-      "severity_score": 52.61,
-      "confidence_score": 84.32,
-      "what_changed": "Updates increased significantly compared to previous month",
-      "root_cause_hint": "Seasonal demand surge or policy-driven update campaign",
-      "early_warning_alert": "No early warning detected"
-    }
-  ]
-}
-Dashboard Output
-- The Streamlit dashboard provides:
+The Streamlit dashboard provides:
 - Summary metrics (total records, anomalies, high-severity alerts)
 - Tabular view of detected anomalies
 - Severity-based visual indicators
 - Clear explanations and recommended actions for monitoring
 
 The dashboard enables quick interpretation of anomalies and supports informed operational and governance decisions.
+
+---
+
 ## Model Evaluation
+
 Since the project involves unsupervised anomaly detection and no labeled ground truth is available, traditional accuracy metrics are not applicable. The model is evaluated using severity scoring, anomaly rate analysis, and temporal pattern validation.
 
+---
 
 ## Advanced Analytics and Governance Support
-The system goes beyond basic anomaly detection by providing explainable and predictive insights. 
-Each detected anomaly includes a root cause hint, a confidence score, and a clear explanation of what changed compared to the previous month. 
-Additionally, an early-warning mechanism forecasts next-month update volumes and raises alerts when abnormal patterns are anticipated.
+
+The system goes beyond basic anomaly detection by providing explainable and predictive insights.  
+Each detected anomaly includes a root cause hint, a confidence score, and a clear explanation of what changed compared to the previous month.  
+Additionally, an early-warning mechanism forecasts next-month update volumes and raises alerts when abnormal patterns are anticipated.  
+
 These features support proactive governance, operational planning, and service reliability monitoring.
 
+---
 
-## Disclaimer:
+## Disclaimer
+
 This project uses publicly available aggregated data and is intended for academic and analytical purposes only.
 
-## Author:
-- Chinmayee Reddy
+---
+
+## Author
+
+Chinmayee Reddy
