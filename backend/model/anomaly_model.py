@@ -1,49 +1,74 @@
 import pandas as pd
 import numpy as np
-from sklearn.preprocessing import StandardScaler
 from sklearn.ensemble import IsolationForest
+from sklearn.preprocessing import StandardScaler
+from sklearn.linear_model import LinearRegression
 
 
 def run_anomaly_detection(df: pd.DataFrame) -> pd.DataFrame:
     # -----------------------------
-    # Basic preprocessing
+    # 1. Normalize column names
     # -----------------------------
-    df["month"] = pd.to_datetime(df["month"], errors="coerce")
+    df.columns = (
+        df.columns
+        .str.strip()
+        .str.lower()
+        .str.replace(" ", "_")
+        .str.replace("-", "_")
+    )
+
+    # -----------------------------
+    # 2. Resolve month column safely
+    # -----------------------------
+    if "month" in df.columns:
+        df["month"] = pd.to_datetime(df["month"], errors="coerce")
+    elif "date" in df.columns:
+        df["month"] = pd.to_datetime(df["date"], errors="coerce")
+    elif "month_year" in df.columns:
+        df["month"] = pd.to_datetime(df["month_year"], errors="coerce")
+    else:
+        raise ValueError("No valid month/date column found in dataset")
+
     df = df.dropna(subset=["month"])
     df = df.sort_values("month").reset_index(drop=True)
 
     # -----------------------------
-    # Feature engineering
+    # 3. Resolve total updates column
     # -----------------------------
-    df["update_growth_rate"] = df["total_updates"].pct_change().fillna(0)
-    df["rolling_avg"] = df["total_updates"].rolling(3).mean().fillna(0)
-    df["trend_deviation"] = df["total_updates"] - df["rolling_avg"]
+    if "total_updates" not in df.columns:
+        numeric_cols = df.select_dtypes(include=np.number).columns.tolist()
+        if len(numeric_cols) == 0:
+            raise ValueError("No numeric column found for update counts")
+        df.rename(columns={numeric_cols[0]: "total_updates"}, inplace=True)
 
-    features = ["total_updates", "update_growth_rate", "trend_deviation"]
-    X = df[features]
+    # -----------------------------
+    # 4. Feature engineering
+    # -----------------------------
+    df["rolling_avg"] = df["total_updates"].rolling(3, min_periods=1).mean()
+    df["trend_deviation"] = df["total_updates"] - df["rolling_avg"]
+    df["update_growth_rate"] = df["total_updates"].pct_change().fillna(0)
+
+    features = ["total_updates", "trend_deviation", "update_growth_rate"]
 
     scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X)
+    X_scaled = scaler.fit_transform(df[features])
 
     # -----------------------------
-    # Isolation Forest
+    # 5. Isolation Forest
     # -----------------------------
     model = IsolationForest(
         n_estimators=200,
         contamination=0.15,
         random_state=42
     )
-
     df["anomaly_flag"] = model.fit_predict(X_scaled)
-    df["anomaly"] = df["anomaly_flag"].map({1: "Normal", -1: "Anomaly"})
 
     # -----------------------------
-    # Severity score & level
+    # 6. Severity score & level
     # -----------------------------
-    df["severity_score"] = (
-        abs(df["update_growth_rate"]) * 100 +
-        abs(df["trend_deviation"]) / df["total_updates"].mean() * 100
-    ).round(2)
+    df["severity_score"] = np.abs(df["trend_deviation"]) / (
+        df["rolling_avg"] + 1e-6
+    ) * 100
 
     def severity_level(score):
         if score >= 60:
@@ -55,104 +80,62 @@ def run_anomaly_detection(df: pd.DataFrame) -> pd.DataFrame:
     df["severity_level"] = df["severity_score"].apply(severity_level)
 
     # -----------------------------
-    # Anomaly type
+    # 7. Anomaly type
     # -----------------------------
     def anomaly_type(row):
-        if row["update_growth_rate"] > 0.5:
+        if row["update_growth_rate"] > 0.3:
             return "Sudden Spike in Updates"
         elif row["update_growth_rate"] < -0.3:
             return "Sudden Drop in Updates"
-        elif abs(row["trend_deviation"]) > row["total_updates"] * 0.25:
+        elif abs(row["trend_deviation"]) > row["rolling_avg"] * 0.25:
             return "Unusual Volume Deviation"
         return "Irregular Pattern"
 
     df["anomaly_type"] = df.apply(anomaly_type, axis=1)
 
     # -----------------------------
-    # Root cause hint
+    # 8. Explainability
     # -----------------------------
-    def root_cause_hint(a_type):
-        if a_type == "Sudden Spike in Updates":
-            return "Seasonal demand surge or policy-driven update campaign"
-        elif a_type == "Sudden Drop in Updates":
-            return "Connectivity issues or temporary centre downtime"
-        elif a_type == "Unusual Volume Deviation":
-            return "Device malfunction or reporting inconsistency"
+    df["what_changed"] = (
+        "Change compared to previous month"
+    )
+
+    def root_cause(row):
+        if row["anomaly_type"] == "Sudden Spike in Updates":
+            return "Policy campaign, seasonal surge, or operational drive"
+        if row["anomaly_type"] == "Sudden Drop in Updates":
+            return "System downtime or regional access issues"
+        return "Gradual operational variation"
+
+    df["root_cause_hint"] = df.apply(root_cause, axis=1)
+
+    # -----------------------------
+    # 9. Confidence score
+    # -----------------------------
+    df["confidence_score"] = np.clip(
+        100 - (df["severity_score"] / 1.2),
+        40,
+        95
+    )
+
+    # -----------------------------
+    # 10. Early-warning forecast
+    # -----------------------------
+    if len(df) >= 4:
+        X_time = np.arange(len(df)).reshape(-1, 1)
+        y = df["total_updates"].values
+
+        reg = LinearRegression()
+        reg.fit(X_time, y)
+
+        next_month_pred = reg.predict([[len(df)]])[0]
+        last_value = df["total_updates"].iloc[-1]
+
+        if abs(next_month_pred - last_value) / last_value > 0.25:
+            df["early_warning_alert"] = "Potential abnormal pattern expected next month"
         else:
-            return "Normal operational fluctuation"
-
-    df["root_cause_hint"] = df["anomaly_type"].apply(root_cause_hint)
-
-    # -----------------------------
-    # Explanation (why flagged)
-    # -----------------------------
-    def explain_anomaly(row):
-        reasons = []
-        if abs(row["update_growth_rate"]) > 0.4:
-            reasons.append("High update growth rate")
-        if abs(row["trend_deviation"]) > row["total_updates"] * 0.25:
-            reasons.append("Large deviation from historical trend")
-        if not reasons:
-            reasons.append("Minor irregular variation")
-        return ", ".join(reasons)
-
-    df["explanation"] = df.apply(explain_anomaly, axis=1)
-
-    # -----------------------------
-    # Confidence score (0–100)
-    # -----------------------------
-    max_sev = df["severity_score"].max()
-    df["confidence_score"] = (
-        df["severity_score"] / max_sev * 100
-    ).round(2)
-
-    # -----------------------------
-    # What changed? (month-to-month)
-    # -----------------------------
-    def what_changed(curr, prev):
-        diff = curr["total_updates"] - prev["total_updates"]
-        pct = (diff / prev["total_updates"]) * 100
-        if pct > 20:
-            return f"Updates increased by {pct:.1f}% compared to previous month"
-        elif pct < -20:
-            return f"Updates decreased by {abs(pct):.1f}% compared to previous month"
-        else:
-            return "Minor change compared to previous month"
-
-    changes = []
-    for i in range(len(df)):
-        if i == 0:
-            changes.append("No previous data for comparison")
-        else:
-            changes.append(what_changed(df.iloc[i], df.iloc[i - 1]))
-
-    df["what_changed"] = changes
-
-    # -----------------------------
-    # Early-warning forecast
-    # -----------------------------
-    if len(df) >= 3:
-        last3 = df.tail(3)
-        avg_val = last3["total_updates"].mean()
-        trend = last3["total_updates"].iloc[-1] - last3["total_updates"].iloc[0]
-        forecast = round(avg_val + (trend / 2), 2)
+            df["early_warning_alert"] = "No early warning detected"
     else:
-        forecast = None
-
-    df["forecast_next_month"] = forecast
-
-    if forecast is not None:
-        mean = df["total_updates"].mean()
-        std = df["total_updates"].std()
-        if forecast > mean + 2 * std:
-            alert = "Early Warning: Possible surge in updates next month"
-        elif forecast < mean - 2 * std:
-            alert = "Early Warning: Possible drop in updates next month"
-        else:
-            alert = "No early warning detected"
-    else:
-        alert = "Insufficient data for forecasting"
-
-    df["early_warning_alert"] = alert
+        df["early_warning_alert"] = "Insufficient data for forecasting"
 
     return df
